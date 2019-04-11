@@ -1,3 +1,8 @@
+Forked from [fgg89/docker-ap](https://github.com/fgg89/docker-ap).
+It is being adapted for being used on a Rock64 (AArch64) device with openmediavault (OMV), and sending all traffice to a proxy (VPN) container running on same host (!!! WORK IN PROGRESS, NOT FUNCTIONAL !!!).
+
+Initial repository has been selected because author chose to configure container using bridge network (not host), and developped scripts to automatically import wireless interface in container network namespace.
+
 # docker-ap
 
 This script prepares a docker container with all the necessary daemons and configuration to run a fully working access point. This includes the following:
@@ -12,7 +17,7 @@ The script must be run as root. The docker image ``fgg89/docker-ap`` will be bui
 The docker container is granted exclusive access to the physical wireless interface (for more info please visit: https://github.com/fgg89/docker-ap/wiki/Container-access-to-wireless-network-interface)
 
 * Tested on: Ubuntu 14.04/16.04, Raspbian 8 (Jessie)
-* Supported architectures: x86_64, armv7
+* Supported architectures: AArch64/arm64
 
 Default configuration
 ---------------------
