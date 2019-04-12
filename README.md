@@ -1,7 +1,7 @@
 Forked from [fgg89/docker-ap](https://github.com/fgg89/docker-ap).
-It is being adapted for being used on a Rock64 (AArch64) device with openmediavault (OMV), and sending all traffice to a proxy (VPN) container running on same host (!!! WORK IN PROGRESS, NOT FUNCTIONAL !!!).
+It is being adapted for a Rock64 (AArch64) device with openmediavault (OMV), and sending all traffic to a proxy (VPN) container running on same host (!!! WORK IN PROGRESS, NOT FUNCTIONAL !!!).
 
-Initial repository has been selected because author chose to configure container using bridge network (not host), and developped scripts to automatically import wireless interface in container network namespace.
+Initial repository has been selected because author chose to configure container using bridge network (not host), and developed script to automatically import wireless physical interface in container network namespace.
 
 # docker-ap
 

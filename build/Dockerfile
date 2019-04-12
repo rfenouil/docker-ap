@@ -1,13 +1,5 @@
-# Use phusion/baseimage as base image. To make your builds
-# reproducible, make sure you lock down to a specific version, not
-# to `latest`! See
-# https://github.com/phusion/baseimage-docker/blob/master/Changelog.md
-# for a list of version numbers.
-FROM armv7/armhf-baseimage:latest
-MAINTAINER fgg89
-
-# Use baseimage-docker's init system.
-CMD ["/bin/bash"]
+FROM balenalib/rpi-raspbian:stretch
+MAINTAINER rfenouil
 
 # Update the repos
 RUN apt-get update && apt-get upgrade -y

@@ -6,193 +6,114 @@
 #                 docker container.
 #                 The docker container has unique access to the
 #                 physical wireless interface. 
-#author          :Fran Gonzalez
-#date            :20150520
-#version         :0.1    
+#author          :Fran Gonzalez (2015)
+#modifications   :Romain Fenouil (2019)
+#github/docker   :rfenouil/docker-ap
 #usage           :bash docker_ap <start|stop> [interface]
-#bash_version    :4.3.11(1)-release (x86_64-pc-linux-gnu)
 #dependencies	 :docker, iw, pgrep, grep, iptables, cat, ip,
 #                 bridge-utils, rfkill
-#=============================================================all 
+#=============================================================
 
-#YELLOW='\e[0;33m'
-#BLACK='\e[0;30m'
-#CYAN='\e[0;36m'
-#WHITE='\e[0;37m'
-MAGENTA='\e[0;35m'
-RED='\e[0;31m'
-GREEN='\e[0;32m'
-BLUE='\e[0;34m'
-NC='\e[0m'
-ROOT_UID="0"
-ARCH=$(arch)
 
-# WLAN parameters
-SSID="DockerAP"
-HW_MODE="g"
-CHANNEL="6"
-PASSPHRASE="dockerap123"
-WPA_MODE="WPA-PSK"
+# Environment variables
+#AP_FORCEDEFAULTROUTE: if "true" (case insensitive), force the use of specified interface even if it is the default route in your system (you will likely lose internet connectivity). Exit with error otherwise.
 
-# Other parameters
-SUBNET="192.168.7"
-IP_AP="192.168.7.1"
-NETMASK="/24"
-DNS_SERVER="8.8.8.8"
-DOCKER_NAME="ap-container"
-CONF_FILE="wlan_config.txt"
-#PATHSCRIPT=$(pwd)
-pushd "$(dirname "$0")" > /dev/null
 PATHSCRIPT=$(pwd)
-popd > /dev/null
+DOCKER_IMAGE="rfenouil/docker-ap"
+DOCKER_NAME="${DOCKER_IMAGE#'*/'}-container"
 
-if [ "$ARCH" == "armv7l" ]
-then
-    DOCKER_IMAGE="fgg89/armhf-docker-ap"
-elif [ "$ARCH" == "x86_64" ]
-then
-    DOCKER_IMAGE="fgg89/docker-ap"
-else
-    echo "Currently supported architectures are x86_64 and armv7. Exiting..."
-    exit 1
-fi
+
+#### Helper functions
 
 show_usage () {
     echo -e "Usage: $0 <start|stop> [interface]"
     exit 1
 }
 
-if [ "$1" == "help" ] || [ "$#" -eq 0 ]
-then
+if [[ "$1" == "help" ]] || [[ "$#" -eq 0 ]]; then
     show_usage
 fi
 
 # Check run as root
-if [ "$UID" -ne "$ROOT_UID" ] ; then
+if [[ "$UID" -ne "$ROOT_UID" ]]; then
     echo "You must be root to run this script!"
     exit 1
 fi
 
 # Argument check
-if [ "$#" -eq 0 ] || [ "$#" -gt 2 ] 
-then
+if [[ "$#" -eq 0 ]] || [[ "$#" -gt 2 ]]; then 
     show_usage
 fi
 
-print_banner () {
-    echo -e "${MAGENTA} ___          _               _   ___   ${NC}"
-    echo -e "${MAGENTA}|   \ ___  __| |_____ _ _    /_\ | _ \\ ${NC}"
-    echo -e "${MAGENTA}| |) / _ \/ _| / / -_) '_|  / _ \|  _/  ${NC}"
-    echo -e "${MAGENTA}|___/\___/\__|_\_\___|_|   /_/ \_\_|    ${NC}"
-    echo ""
-}
 
-init () {
+
+#### Init: check/build docker image, check for interface/services and bring it up, generate config files
+
+init () 
+{
+    ### Interface
+
     IFACE="$1"
     
     # Check that the requested iface is available
-    if ! [ -e /sys/class/net/"$IFACE" ]
-    then
-        echo -e "${RED}[ERROR]${NC} The interface provided does not exist. Exiting..."
+    if ! [[ -e /sys/class/net/"$IFACE" ]]; then
+        echo -e "[ERROR] The interface provided does not exist. Exiting..."
         exit 1
     fi
-   
+    
     # Check that the given interface is not used by the host as the default route
-    if [[ $(ip r | grep default | cut -d " " -f5) == "$IFACE" ]]
-    then
-        echo -e "${BLUE}[INFO]${NC} The selected interface is configured as the default route, if you use it you will lose internet connectivity"
-        while true;
-        do
-            read -p "Do you wish to continue? [y/n]" yn
-            case $yn in
-                [Yy]* ) break;;
-                [Nn]* ) exit;;
-                * ) echo "Please answer yes or no.";;
-            esac
-        done
+    if [[ $(ip r | grep default | cut -d " " -f5) == "$IFACE" ]]; then
+        echo -en "[INFO] The selected interface is configured as the default route... "
+        if [[ "${AP_FORCEDEFAULTROUTE,,}" == "true" ]]; then
+            echo -e "Proceeding (AP_FORCEDEFAULTROUTE=true)... You will likely lose internet connectivity."
+        else
+            echo -e "Exiting... Set env 'AP_FORCEDEFAULTROUTE=true' to override."
+            exit 1
+        fi    
 	fi
-
+    
     # Find the physical interface for the given wireless interface
     PHY=$(cat /sys/class/net/"$IFACE"/phy80211/name)
-
-    # Architecture
-    echo -e "${BLUE}[INFO]${NC} Architecture: ${GREEN}$ARCH${NC}"
     
-    # Number of phy interfaces
-    NUM_PHYS=$(iw dev | grep -c phy)
-    echo -e "${BLUE}[INFO]${NC} Number of physical wireless interfaces connected: ${GREEN}$NUM_PHYS${NC}"
-    
-    # Checking if the docker image has been already pulled
-    IMG_CHECK=$(docker images -q $DOCKER_IMAGE)
-    if [ "$IMG_CHECK" != "" ]
-    then
-        echo -e "${BLUE}[INFO]${NC} Docker image ${GREEN}$DOCKER_IMAGE${NC} found"
-    else
-        echo -e "${BLUE}[INFO]${NC} Docker image ${RED}$DOCKER_IMAGE${NC} not found"
-        # Option 1: Building
-        echo -e "[+] Building the image ${GREEN}$DOCKER_IMAGE${NC} (Grab a coffee...)"
-        if [ "$ARCH" == "armv7l" ]
-        then
-            docker build -q --rm -t $DOCKER_IMAGE -f "$PATHSCRIPT"/build/Dockerfile_armv7 .
-        elif [ "$ARCH" == "x86_64" ]
-        then
-            docker build -q --rm -t $DOCKER_IMAGE -f "$PATHSCRIPT"/build/Dockerfile_x86_64 .
-        fi
-    fi
-
-    ### Check if hostapd is running in the host
+    # Check if hostapd is running in the host
     hostapd_pid=$(pgrep hostapd)
-    if [ ! "$hostapd_pid" == "" ] 
-    then
-       echo -e "${BLUE}[INFO]${NC} hostapd service is already running in the system, make sure you use a different wireless interface..."
-       #kill -9 "$hostapd_pid"
+    if [[ ! "$hostapd_pid" == "" ]]; then
+       echo -e "[INFO] hostapd service is already running in the system, make sure you use a different wireless interface..."
     fi
-
+    
     # Unblock wifi and bring the wireless interface up
-    echo -e "${BLUE}[INFO]${NC} Unblocking wifi and setting ${IFACE} up"
+    echo -e "[INFO] Unblocking wifi and setting ${IFACE} up"
     rfkill unblock wifi
     ip link set "$IFACE" up
-
-    # Check if a wlan config file exists, else take wlan parameters by default
-    if [ -e "$PATHSCRIPT"/"$CONF_FILE" ]
-    then
-        echo -e "${BLUE}[INFO]${NC} Found WLAN config file"
-	    # Parse the wlan config file
-		IFS="="
-		while read -r name value
-		do
-                    case $name in
-                        ''|\#* ) continue;; # Skip blank lines and lines starting with #
-                        "SSID" )
-                            SSID=${value//\"/}
-                            echo -e "${BLUE}"[INFO]"${NC}" SSID: "${MAGENTA}""$SSID""${NC}";;
-                        "PASSPHRASE" )
-                            PASSPHRASE=${value//\"/};;
-                        "HW_MODE" )
-                            HW_MODE=${value//\"/};;
-                        "CHANNEL" )
-                            CHANNEL=${value//\"/};;
-                        * )
-                            echo Parameter "$name" in "$PATHSCRIPT"/"$CONF_FILE" not recognized
-		    esac
-		done < "$PATHSCRIPT"/"$CONF_FILE"
-    else
-        echo -e "${BLUE}[INFO]${NC} WLAN config file not found. Setting default WLAN parameters"
-        echo -e "${BLUE}"[INFO]"${NC}" SSID: "${MAGENTA}""$SSID""${NC}"
+    
+    # Check if a AP and DHCP configuration files exist
+    if [[ ! -f "hostapd.conf" ]] || [[ ! -f "dnsmasq.conf" ]]; then
+        echo -e "[ERROR] Could not find configuration files for access point (hostapd.conf) or DHCP (dnsmasq.conf) servers. Exiting..."
+        exit 1
     fi
 
-    ### Generating hostapd.conf file
-    echo -e "[+] Generating hostapd.conf"
-    sed -e "s/_SSID/$SSID/g" -e "s/_IFACE/$IFACE/" -e "s/_HW_MODE/$HW_MODE/g" -e "s/_CHANNEL/$CHANNEL/g" -e "s/_PASSPHRASE/$PASSPHRASE/g" -e "s/_WPA_MODE/$WPA_MODE/g" "$PATHSCRIPT"/templates/hostapd.template > "$PATHSCRIPT"/hostapd.conf
 
-    ### Generating dnsmasq.conf file
-    echo -e "[+] Generating dnsmasq.conf" 
-    sed -e "s/_DNS_SERVER/$DNS_SERVER/g" -e "s/_IFACE/$IFACE/" -e "s/_SUBNET_FIRST/$SUBNET.20/g" -e "s/_SUBNET_END/$SUBNET.254/g" "$PATHSCRIPT"/templates/dnsmasq.template > "$PATHSCRIPT"/dnsmasq.conf
+    ### Docker check/build
+        
+    # Checking if the docker image has been already pulled
+    IMG_CHECK=$(docker images -q $DOCKER_IMAGE)
+    if [[ -n "$IMG_CHECK" ]]; then
+        echo -e "[INFO] Docker image $DOCKER_IMAGE found"
+    else
+        echo -e "[INFO] Docker image $DOCKER_IMAGE not found"
+        echo -e "[+] Building the image $DOCKER_IMAGE (Grab a coffee...)"
+        docker build -q -t $DOCKER_IMAGE -f "$PATHSCRIPT"/build/Dockerfile .
+    fi
 }
 
-service_start () { 
+
+
+#### Start: Start container and assign physical interface to its network namespace
+
+service_start ()
+{
     IFACE="$1"
-    echo -e "[+] Starting the docker container with name ${GREEN}$DOCKER_NAME${NC}"
+    echo -e "[+] Starting the docker container with name $DOCKER_NAME"
     docker run -dt --name $DOCKER_NAME --net=bridge --cap-add=NET_ADMIN --cap-add=NET_RAW -v "$PATHSCRIPT"/hostapd.conf:/etc/hostapd/hostapd.conf -v "$PATHSCRIPT"/dnsmasq.conf:/etc/dnsmasq.conf $DOCKER_IMAGE > /dev/null 2>&1
     pid=$(docker inspect -f '{{.State.Pid}}' $DOCKER_NAME)
     
@@ -202,7 +123,7 @@ service_start () {
     iw phy "$PHY" set netns "$pid"
     
     ### Assign an IP to the wifi interface
-    echo -e "[+] Configuring ${GREEN}$IFACE${NC} with IP address ${GREEN}$IP_AP${NC}"
+    echo -e "[+] Configuring $IFACE with IP address $IP_AP"
     ip netns exec "$pid" ip addr flush dev "$IFACE"
     ip netns exec "$pid" ip link set "$IFACE" up
     ip netns exec "$pid" ip addr add "$IP_AP$NETMASK" dev "$IFACE"
@@ -215,49 +136,47 @@ service_start () {
     echo "[+] Enabling IP forwarding (container)"
     ip netns exec "$pid" echo 1 > /proc/sys/net/ipv4/ip_forward
     ### start hostapd and dnsmasq in the container
-    echo -e "[+] Starting ${GREEN}hostapd${NC} and ${GREEN}dnsmasq${NC} in the docker container ${GREEN}$DOCKER_NAME${NC}"
+    echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
     docker exec "$DOCKER_NAME" start_ap
 }
 
-service_stop () { 
+
+
+#### Stop: 
+
+service_stop () 
+{
     IFACE="$1"
-    echo -e "[-] Stopping ${GREEN}$DOCKER_NAME${NC}"
-    docker stop $DOCKER_NAME > /dev/null 2>&1 
-    echo -e "[-] Removing ${GREEN}$DOCKER_NAME${NC}"
-    docker rm $DOCKER_NAME > /dev/null 2>&1 
-    echo [-] Removing conf files
-    if [ -e "$PATHSCRIPT"/hostapd.conf ]
-    then
-        rm "$PATHSCRIPT"/hostapd.conf
-    fi
-    if [ -e "$PATHSCRIPT"/dnsmasq.conf ]
-    then
-        rm "$PATHSCRIPT"/dnsmasq.conf
-    fi
-    echo [-] Removing IP address in "$IFACE"
-    ip addr del "$IP_AP$NETMASK" dev "$IFACE" > /dev/null 2>&1
+    
+    echo -e "[-] Stopping $DOCKER_NAME"
+    docker stop $DOCKER_NAME
+    echo -e "[-] Removing $DOCKER_NAME"
+    docker rm $DOCKER_NAME
+     
+    echo "[-] Removing conf files"
+    rm -f "$PATHSCRIPT"/hostapd.conf
+    rm -f "$PATHSCRIPT"/dnsmasq.conf
+    
+    echo "[-] Removing IP address in $IFACE"
+    ip addr del "$IP_AP$NETMASK" dev "$IFACE"
     # Clean up dangling symlinks in /var/run/netns
-    find -L /var/run/netns -type l -delete
+    find -L /var/run/netns -type l -delete ### DOES THAT WORK ??? find -L sees links as files so '-type l' should not match anything (!!!)
 }
 
-if [ "$1" == "start" ]
-then
-    if [[ -z "$2" ]]
-    then
-        echo -e "${RED}[ERROR]${NC} No interface provided. Exiting..."
+
+if [[ "$1" == "start" ]]; then
+    if [[ -z "$2" ]]; then
+        echo -e "[ERROR] No interface provided. Exiting..."
         exit 1
     fi
     IFACE=${2}
     service_stop "$IFACE"
-    clear    
-    print_banner
+    clear
     init "$IFACE"
     service_start "$IFACE"
-elif [ "$1" == "stop" ]
-then
-    if [[ -z "$2" ]]
-    then
-        echo -e "${RED}[ERROR]${NC} No interface provided. Exiting..."
+elif [[ "$1" == "stop" ]]; then
+    if [[ -z "$2" ]]; then
+        echo -e "[ERROR] No interface provided. Exiting..."
         exit 1
     fi
     IFACE=${2}
@@ -265,3 +184,5 @@ then
 else
     echo "Usage: $0 <start|stop> <interface>"
 fi
+
+
