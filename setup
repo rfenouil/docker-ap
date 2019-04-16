@@ -1,9 +1,5 @@
 #!/bin/bash
 
+# Install dependencies for script 'docker_ap' which configures and starts container
 apt-get update
-apt-get install wget bridge-utils iw rfkill
-
-# Get the latest Docker package
-wget -qO- https://get.docker.com/ | sh
-
-
+apt-get install bridge-utils iw rfkill

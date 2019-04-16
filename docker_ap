@@ -18,12 +18,25 @@
 # Environment variables
 #AP_FORCEDEFAULTROUTE: if "true" (case insensitive), force the use of specified interface even if it is the default route in your system (you will likely lose internet connectivity). Exit with error otherwise.
 
-PATHSCRIPT=$(pwd)
+# WLAN parameters
+SSID=""
+PASSPHRASE=""
+HW_MODE="g"
+CHANNEL="0"
+WPA_MODE="WPA-PSK"
+
+# Network parameters
+IP_AP="192.168.100.1"
+SUBNET="192.168.100.0"
+NETMASK="/24"
+DHCP_START="192.168.100.10"
+DHCP_STOP="192.168.100.100"
+DNS_SERVER="8.8.8.8"
+
+# Other parameters
+PATHSCRIPT=$(readlink -m ${0%/*})
 DOCKER_IMAGE="rfenouil/docker-ap"
 DOCKER_NAME="${DOCKER_IMAGE#'*/'}-container"
-
-IP_AP="192.168.100.1"
-NETMASK="/24"
 
 
 
@@ -90,13 +103,24 @@ init ()
     rfkill unblock wifi
     ip link set "$IFACE" up
     
-    # Check if a AP and DHCP configuration files exist
-    if [[ ! -f "hostapd.conf" ]] || [[ ! -f "dnsmasq.conf" ]]; then
-        echo -e "[ERROR] Could not find configuration files for access point (hostapd.conf) or DHCP (dnsmasq.conf) servers. Exiting..."
-        exit 1
-    fi
 
+    
+    ### Generating hostapd.conf file. Gets mounted during docker startup at: '/etc/hostapd/hostapd.conf'
+    echo -e "[+] Generating hostapd.conf"
+    sed -e "s/_SSID/$SSID/g" -e "s/_IFACE/$IFACE/" -e "s/_HW_MODE/$HW_MODE/g" -e "s/_CHANNEL/$CHANNEL/g" -e "s/_PASSPHRASE/$PASSPHRASE/g" -e "s/_WPA_MODE/$WPA_MODE/g" "$PATHSCRIPT"/templates/hostapd.template > "$PATHSCRIPT"/hostapd.conf
 
+    ### Generating dnsmasq.conf file. Gets mounted during docker startup at: '/etc/dnsmasq.conf'
+    echo -e "[+] Generating dnsmasq.conf" 
+    sed -e "s/_DNS_SERVER/$DNS_SERVER/g" -e "s/_IFACE/$IFACE/" -e "s/_SUBNET_FIRST/$SUBNET.20/g" -e "s/_SUBNET_END/$SUBNET.254/g" "$PATHSCRIPT"/templates/dnsmasq.template > "$PATHSCRIPT"/dnsmasq.conf
+    
+	# Check if a AP and DHCP configuration files exist
+    #if [[ ! -f "hostapd.conf" ]] || [[ ! -f "dnsmasq.conf" ]]; then
+    #    echo -e "[ERROR] Could not find configuration files for access point (hostapd.conf) or DHCP (dnsmasq.conf) servers. Exiting..."
+    #    exit 1
+    #fi    
+    
+    
+    
     ### Docker check/build
         
     # Checking if the docker image has been already pulled
@@ -118,7 +142,13 @@ service_start ()
 {
     IFACE="$1"
     echo -e "[+] Starting the docker container with name $DOCKER_NAME"
-    docker run -dt --name $DOCKER_NAME --net=bridge --cap-add=NET_ADMIN --cap-add=NET_RAW -v "$PATHSCRIPT"/hostapd.conf:/etc/hostapd/hostapd.conf -v "$PATHSCRIPT"/dnsmasq.conf:/etc/dnsmasq.conf $DOCKER_IMAGE > /dev/null 2>&1
+	# Run docker and put required configuration files in appropriate folders (using volumes)
+    docker run -dt --name $DOCKER_NAME --net=bridge --cap-add=NET_ADMIN --cap-add=NET_RAW \
+      -v "$PATHSCRIPT"/hostapd.conf:/etc/hostapd/hostapd.conf \
+      -v "$PATHSCRIPT"/dnsmasq.conf:/etc/dnsmasq.conf \
+      -v "$PATHSCRIPT"/scripts/hostapd_default:/etc/default/hostapd \
+      -v 
+      $DOCKER_IMAGE > /dev/null 2>&1
     pid=$(docker inspect -f '{{.State.Pid}}' $DOCKER_NAME)
     
     # Assign phy wireless interface to the container 

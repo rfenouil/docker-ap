@@ -1,0 +1,10 @@
+# This file is mounted at container startup to overwrite default '/etc/default/hostapd'
+# Required to start hostapd  with systemd and use specified configuration file
+#
+# From original comments:
+# Uncomment and set DAEMON_CONF to the absolute path of a hostapd configuration
+# file and hostapd will be started during system boot.
+# ...
+
+RUN_DAEMON="yes"
+DAEMON_CONF="/etc/hostapd/hostapd.conf" # Also put here at container startup
