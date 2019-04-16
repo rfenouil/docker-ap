@@ -22,6 +22,10 @@ PATHSCRIPT=$(pwd)
 DOCKER_IMAGE="rfenouil/docker-ap"
 DOCKER_NAME="${DOCKER_IMAGE#'*/'}-container"
 
+IP_AP="192.168.100.1"
+NETMASK="/24"
+
+
 
 #### Helper functions
 
@@ -128,13 +132,14 @@ service_start ()
     ip netns exec "$pid" ip link set "$IFACE" up
     ip netns exec "$pid" ip addr add "$IP_AP$NETMASK" dev "$IFACE"
 
-    ### iptables rules for NAT
+    ### iptables rules for NAT (translate/masquerade all addresses going through this interface output)
     echo "[+] Adding natting rule to iptables (container)"
-    ip netns exec "$pid" iptables -t nat -A POSTROUTING -s $SUBNET.0$NETMASK ! -d $SUBNET.0$NETMASK -j MASQUERADE
+    ip netns exec "$pid" iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE
     
     ### Enable IP forwarding
     echo "[+] Enabling IP forwarding (container)"
     ip netns exec "$pid" echo 1 > /proc/sys/net/ipv4/ip_forward
+    
     ### start hostapd and dnsmasq in the container
     echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
     docker exec "$DOCKER_NAME" start_ap
@@ -153,14 +158,10 @@ service_stop ()
     echo -e "[-] Removing $DOCKER_NAME"
     docker rm $DOCKER_NAME
      
-    echo "[-] Removing conf files"
-    rm -f "$PATHSCRIPT"/hostapd.conf
-    rm -f "$PATHSCRIPT"/dnsmasq.conf
-    
     echo "[-] Removing IP address in $IFACE"
     ip addr del "$IP_AP$NETMASK" dev "$IFACE"
     # Clean up dangling symlinks in /var/run/netns
-    find -L /var/run/netns -type l -delete ### DOES THAT WORK ??? find -L sees links as files so '-type l' should not match anything (!!!)
+    find /var/run/netns -type l -delete
 }
 
 
