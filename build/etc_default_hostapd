@@ -1,0 +1,11 @@
+# This file is ADDed during image compilation (Dockefile).
+# It overwrites default '/etc/default/hostapd'.
+# Required to start hostapd and use specified configuration file (mounted when starting container).
+#
+# From original comments:
+# Uncomment and set DAEMON_CONF to the absolute path of a hostapd configuration
+# file and hostapd will be started during system boot.
+# ...
+
+RUN_DAEMON="yes"
+DAEMON_CONF="/etc/hostapd/hostapd.conf" # Mounted during container startup

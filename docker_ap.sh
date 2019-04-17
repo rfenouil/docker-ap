@@ -19,8 +19,8 @@
 #AP_FORCEDEFAULTROUTE: if "true" (case insensitive), force the use of specified interface even if it is the default route in your system (you will likely lose internet connectivity). Exit with error otherwise.
 
 # WLAN parameters
-SSID=""
-PASSPHRASE=""
+SSID="ssid_test"
+PASSPHRASE="blablabla"
 HW_MODE="g"
 CHANNEL="0"
 WPA_MODE="WPA-PSK"
@@ -30,13 +30,19 @@ IP_AP="192.168.100.1"
 SUBNET="192.168.100.0"
 NETMASK="/24"
 DHCP_START="192.168.100.10"
-DHCP_STOP="192.168.100.100"
+DHCP_END="192.168.100.100"
 DNS_SERVER="8.8.8.8"
 
 # Other parameters
 PATHSCRIPT=$(readlink -m ${0%/*})
 DOCKER_IMAGE="rfenouil/docker-ap"
-DOCKER_NAME="${DOCKER_IMAGE#'*/'}-container"
+DOCKER_NAME="${DOCKER_IMAGE#*/}-container"
+
+# For debug
+#git clone https://github.com/rfenouil/docker-ap.git
+#cd docker-ap
+#PATHSCRIPT=$(pwd)
+#IFACE="wlx0013ef801b4e"
 
 
 
@@ -103,27 +109,27 @@ init ()
     rfkill unblock wifi
     ip link set "$IFACE" up
     
-
+	
     
     ### Generating hostapd.conf file. Gets mounted during docker startup at: '/etc/hostapd/hostapd.conf'
     echo -e "[+] Generating hostapd.conf"
     sed -e "s/_SSID/$SSID/g" -e "s/_IFACE/$IFACE/" -e "s/_HW_MODE/$HW_MODE/g" -e "s/_CHANNEL/$CHANNEL/g" -e "s/_PASSPHRASE/$PASSPHRASE/g" -e "s/_WPA_MODE/$WPA_MODE/g" "$PATHSCRIPT"/templates/hostapd.template > "$PATHSCRIPT"/hostapd.conf
-
+    
     ### Generating dnsmasq.conf file. Gets mounted during docker startup at: '/etc/dnsmasq.conf'
     echo -e "[+] Generating dnsmasq.conf" 
-    sed -e "s/_DNS_SERVER/$DNS_SERVER/g" -e "s/_IFACE/$IFACE/" -e "s/_SUBNET_FIRST/$SUBNET.20/g" -e "s/_SUBNET_END/$SUBNET.254/g" "$PATHSCRIPT"/templates/dnsmasq.template > "$PATHSCRIPT"/dnsmasq.conf
+    sed -e "s/_DNS_SERVER/$DNS_SERVER/g" -e "s/_IFACE/$IFACE/" -e "s/_SUBNET_FIRST/$DHCP_START/g" -e "s/_SUBNET_END/$DHCP_END/g" "$PATHSCRIPT"/templates/dnsmasq.template > "$PATHSCRIPT"/dnsmasq.conf
     
 	# Check if a AP and DHCP configuration files exist
     #if [[ ! -f "hostapd.conf" ]] || [[ ! -f "dnsmasq.conf" ]]; then
     #    echo -e "[ERROR] Could not find configuration files for access point (hostapd.conf) or DHCP (dnsmasq.conf) servers. Exiting..."
     #    exit 1
-    #fi    
+    #fi
     
     
     
     ### Docker check/build
-        
-    # Checking if the docker image has been already pulled
+    
+    # Checking if the docker image has been already pulled/built
     IMG_CHECK=$(docker images -q $DOCKER_IMAGE)
     if [[ -n "$IMG_CHECK" ]]; then
         echo -e "[INFO] Docker image $DOCKER_IMAGE found"
@@ -160,7 +166,7 @@ service_start ()
     ip netns exec "$pid" ip addr flush dev "$IFACE"
     ip netns exec "$pid" ip link set "$IFACE" up
     ip netns exec "$pid" ip addr add "$IP_AP$NETMASK" dev "$IFACE"
-
+	
     ### iptables rules for NAT (translate/masquerade all addresses going through this interface output)
     echo "[+] Adding natting rule to iptables (container)"
     ip netns exec "$pid" iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE
@@ -171,8 +177,11 @@ service_start ()
     
     ### start hostapd and dnsmasq in the container (started on boot automatically ?)
     #echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
-    #docker exec "$DOCKER_NAME" service hostapd start
-    #docker exec "$DOCKER_NAME" service dnsmasq start
+    docker exec "$DOCKER_NAME" service hostapd start
+    docker exec "$DOCKER_NAME" service dnsmasq start
+    
+    # For debug (get an interactive shell in running container):
+    #docker exec -it $DOCKER_NAME bash
 }
 
 

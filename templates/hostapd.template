@@ -12,15 +12,3 @@ ctrl_interface=/var/run/hostapd
 wpa=2
 wpa_passphrase=_PASSPHRASE
 wpa_key_mgmt=_WPA_MODE
-
-#rsn_pairwise=CCMP
-#ieee8021x=1
-#eapol_version=2
-
-#auth_server_addr=192.168.122.2
-#auth_server_port=1812
-#auth_server_shared_secret=password123
-
-#acct_server_addr=192.168.122.2
-#acct_server_port=1813
-#acct_server_shared_secret=password123
