@@ -174,8 +174,8 @@ service_start ()
     echo "[+] Enabling IP forwarding (container)"
     ip netns exec "$pid" echo 1 > /proc/sys/net/ipv4/ip_forward
     
-    ### start hostapd and dnsmasq in the container (started on boot automatically ?)
-    #echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
+    ### start hostapd and dnsmasq in the container
+    echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
     docker exec "$DOCKER_NAME" service hostapd start
     docker exec "$DOCKER_NAME" service dnsmasq start
     
