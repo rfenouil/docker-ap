@@ -146,8 +146,7 @@ service_start ()
     docker run -dt --name $DOCKER_NAME --net=bridge --cap-add=NET_ADMIN --cap-add=NET_RAW \
       -v "$PATHSCRIPT"/hostapd.conf:/etc/hostapd/hostapd.conf \
       -v "$PATHSCRIPT"/dnsmasq.conf:/etc/dnsmasq.conf \
-      -v "$PATHSCRIPT"/scripts/hostapd_default:/etc/default/hostapd \
-      -v 
+      -v "$PATHSCRIPT"/templates/etc_default_hostapd:/etc/default/hostapd \
       $DOCKER_IMAGE > /dev/null 2>&1
     pid=$(docker inspect -f '{{.State.Pid}}' $DOCKER_NAME)
     
@@ -170,9 +169,10 @@ service_start ()
     echo "[+] Enabling IP forwarding (container)"
     ip netns exec "$pid" echo 1 > /proc/sys/net/ipv4/ip_forward
     
-    ### start hostapd and dnsmasq in the container
-    echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
-    docker exec "$DOCKER_NAME" start_ap
+    ### start hostapd and dnsmasq in the container (started on boot automatically ?)
+    #echo -e "[+] Starting hostapd and dnsmasq in the docker container $DOCKER_NAME"
+    #docker exec "$DOCKER_NAME" service hostapd start
+    #docker exec "$DOCKER_NAME" service dnsmasq start
 }
 
 
