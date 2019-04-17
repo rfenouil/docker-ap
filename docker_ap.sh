@@ -152,7 +152,6 @@ service_start ()
     docker run -dt --name $DOCKER_NAME --net=bridge --cap-add=NET_ADMIN --cap-add=NET_RAW \
       -v "$PATHSCRIPT"/hostapd.conf:/etc/hostapd/hostapd.conf \
       -v "$PATHSCRIPT"/dnsmasq.conf:/etc/dnsmasq.conf \
-      -v "$PATHSCRIPT"/templates/etc_default_hostapd:/etc/default/hostapd \
       $DOCKER_IMAGE > /dev/null 2>&1
     pid=$(docker inspect -f '{{.State.Pid}}' $DOCKER_NAME)
     
