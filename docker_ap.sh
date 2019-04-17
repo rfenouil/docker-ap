@@ -136,7 +136,7 @@ init ()
     else
         echo -e "[INFO] Docker image $DOCKER_IMAGE not found"
         echo -e "[+] Building the image $DOCKER_IMAGE (Grab a coffee...)"
-        docker build -q -t $DOCKER_IMAGE -f "$PATHSCRIPT"/build/Dockerfile .
+        docker build -q -t $DOCKER_IMAGE .
     fi
 }
 
